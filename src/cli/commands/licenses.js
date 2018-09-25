@@ -1,22 +1,30 @@
 /* @flow */
 
-import type {Reporter} from '../../reporters/index.js';
-import type Config from '../../config.js';
-import type {Manifest} from '../../types.js';
-import NoopReporter from '../../reporters/base-reporter.js';
-import {Install} from './install.js';
-import Lockfile from '../../lockfile';
-import buildSubCommands from './_build-sub-commands.js';
+import type { Reporter } from "../../reporters/index.js";
+import type Config from "../../config.js";
+import type { Manifest } from "../../types.js";
+import NoopReporter from "../../reporters/base-reporter.js";
+import { Install } from "./install.js";
+import Lockfile from "../../lockfile";
+import buildSubCommands from "./_build-sub-commands.js";
 
-const invariant = require('invariant');
+const invariant = require("invariant");
 
 export function hasWrapper(flags: Object, args: Array<string>): boolean {
-  return args[0] != 'generate-disclaimer';
+  return args[0] != "generate-disclaimer";
 }
 
-async function getManifests(config: Config, flags: Object): Promise<Array<Manifest>> {
+async function getManifests(
+  config: Config,
+  flags: Object
+): Promise<Array<Manifest>> {
   const lockfile = await Lockfile.fromDirectory(config.cwd);
-  const install = new Install({skipIntegrityCheck: true, ...flags}, config, new NoopReporter(), lockfile);
+  const install = new Install(
+    { skipIntegrityCheck: true, ...flags },
+    config,
+    new NoopReporter(),
+    lockfile
+  );
   await install.hydrate(true);
 
   let manifests = install.resolver.getManifests();
@@ -47,12 +55,25 @@ async function getManifests(config: Config, flags: Object): Promise<Array<Manife
   return manifests;
 }
 
-async function list(config: Config, reporter: Reporter, flags: Object, args: Array<string>): Promise<void> {
+async function list(
+  config: Config,
+  reporter: Reporter,
+  flags: Object,
+  args: Array<string>
+): Promise<void> {
   const manifests: Array<Manifest> = await getManifests(config, flags);
   const manifestsByLicense = new Map();
 
-  for (const {name, version, license, repository, homepage, author} of manifests) {
-    const licenseKey = license || 'UNKNOWN';
+  for (const {
+    name,
+    version,
+    license,
+    licenseText,
+    repository,
+    homepage,
+    author
+  } of manifests) {
+    const licenseKey = license || "UNKNOWN";
     const url = repository ? repository.url : homepage;
     const vendorUrl = homepage || (author && author.url);
     const vendorName = author && author.name;
@@ -62,13 +83,14 @@ async function list(config: Config, reporter: Reporter, flags: Object, args: Arr
     }
 
     const byLicense = manifestsByLicense.get(licenseKey);
-    invariant(byLicense, 'expected value');
+    invariant(byLicense, "expected value");
     byLicense.set(`${name}@${version}`, {
       name,
       version,
       url,
       vendorUrl,
       vendorName,
+      licenseText
     });
   }
 
@@ -76,62 +98,104 @@ async function list(config: Config, reporter: Reporter, flags: Object, args: Arr
     const body = [];
 
     manifestsByLicense.forEach((license, licenseKey) => {
-      license.forEach(({name, version, url, vendorUrl, vendorName}) => {
-        body.push([name, version, licenseKey, url || 'Unknown', vendorUrl || 'Unknown', vendorName || 'Unknown']);
-      });
+      license.forEach(
+        ({ name, version, licenseText, url, vendorUrl, vendorName }) => {
+          body.push([
+            name,
+            version,
+            licenseKey,
+            licenseText || "Unknown",
+            url || "Unknown",
+            vendorUrl || "Unknown",
+            vendorName || "Unknown"
+          ]);
+        }
+      );
     });
 
-    reporter.table(['Name', 'Version', 'License', 'URL', 'VendorUrl', 'VendorName'], body);
+    reporter.table(
+      [
+        "Name",
+        "Version",
+        "License",
+        "LicenseText",
+        "URL",
+        "VendorUrl",
+        "VendorName"
+      ],
+      body
+    );
   } else {
     const trees = [];
 
     manifestsByLicense.forEach((license, licenseKey) => {
       const licenseTree = [];
 
-      license.forEach(({name, version, url, vendorUrl, vendorName}) => {
+      license.forEach(({ name, version, url, vendorUrl, vendorName }) => {
         const children = [];
 
         if (url) {
-          children.push({name: `${reporter.format.bold('URL:')} ${url}`});
+          children.push({ name: `${reporter.format.bold("URL:")} ${url}` });
         }
 
         if (vendorUrl) {
-          children.push({name: `${reporter.format.bold('VendorUrl:')} ${vendorUrl}`});
+          children.push({
+            name: `${reporter.format.bold("VendorUrl:")} ${vendorUrl}`
+          });
         }
 
         if (vendorName) {
-          children.push({name: `${reporter.format.bold('VendorName:')} ${vendorName}`});
+          children.push({
+            name: `${reporter.format.bold("VendorName:")} ${vendorName}`
+          });
         }
 
         licenseTree.push({
           name: `${name}@${version}`,
-          children,
+          children
         });
       });
 
       trees.push({
         name: licenseKey,
-        children: licenseTree,
+        children: licenseTree
       });
     });
 
-    reporter.tree('licenses', trees, {force: true});
+    reporter.tree("licenses", trees, { force: true });
   }
 }
 export function setFlags(commander: Object) {
-  commander.description('Lists licenses for installed packages.');
+  commander.description("Lists licenses for installed packages.");
 }
-export const {run, examples} = buildSubCommands('licenses', {
-  async ls(config: Config, reporter: Reporter, flags: Object, args: Array<string>): Promise<void> {
-    reporter.warn(`\`yarn licenses ls\` is deprecated. Please use \`yarn licenses list\`.`);
+export const { run, examples } = buildSubCommands("licenses", {
+  async ls(
+    config: Config,
+    reporter: Reporter,
+    flags: Object,
+    args: Array<string>
+  ): Promise<void> {
+    reporter.warn(
+      `\`yarn licenses ls\` is deprecated. Please use \`yarn licenses list\`.`
+    );
     await list(config, reporter, flags, args);
   },
 
-  async list(config: Config, reporter: Reporter, flags: Object, args: Array<string>): Promise<void> {
+  async list(
+    config: Config,
+    reporter: Reporter,
+    flags: Object,
+    args: Array<string>
+  ): Promise<void> {
     await list(config, reporter, flags, args);
   },
 
-  async generateDisclaimer(config: Config, reporter: Reporter, flags: Object, args: Array<string>): Promise<void> {
+  async generateDisclaimer(
+    config: Config,
+    reporter: Reporter,
+    flags: Object,
+    args: Array<string>
+  ): Promise<void> {
     /* eslint-disable no-console */
 
     // `reporter.log` dumps a bunch of ANSI escapes to clear the current line and
@@ -148,7 +212,7 @@ export const {run, examples} = buildSubCommands('licenses', {
     // the same license text are grouped together.
     const manifestsByLicense: Map<string, Map<string, Manifest>> = new Map();
     for (const manifest of manifests) {
-      const {licenseText, noticeText} = manifest;
+      const { licenseText, noticeText } = manifest;
       let licenseKey;
       if (!licenseText) {
         continue;
@@ -165,37 +229,51 @@ export const {run, examples} = buildSubCommands('licenses', {
       }
 
       const byLicense = manifestsByLicense.get(licenseKey);
-      invariant(byLicense, 'expected value');
+      invariant(byLicense, "expected value");
       byLicense.set(manifest.name, manifest);
     }
 
     console.log(
-      'THE FOLLOWING SETS FORTH ATTRIBUTION NOTICES FOR THIRD PARTY SOFTWARE THAT MAY BE CONTAINED ' +
-        `IN PORTIONS OF THE ${String(manifest.name).toUpperCase().replace(/-/g, ' ')} PRODUCT.`,
+      "THE FOLLOWING SETS FORTH ATTRIBUTION NOTICES FOR THIRD PARTY SOFTWARE THAT MAY BE CONTAINED " +
+        `IN PORTIONS OF THE ${String(manifest.name)
+          .toUpperCase()
+          .replace(/-/g, " ")} PRODUCT.`
     );
     console.log();
 
     for (const [licenseKey, manifests] of manifestsByLicense) {
-      console.log('-----');
+      console.log("-----");
       console.log();
 
       const names = [];
       const urls = [];
-      for (const [name, {repository}] of manifests) {
+      for (const [name, { repository }] of manifests) {
         names.push(name);
         if (repository && repository.url) {
-          urls.push(manifests.size === 1 ? repository.url : `${repository.url} (${name})`);
+          urls.push(
+            manifests.size === 1
+              ? repository.url
+              : `${repository.url} (${name})`
+          );
         }
       }
 
       const heading = [];
-      heading.push(`The following software may be included in this product: ${names.join(', ')}.`);
+      heading.push(
+        `The following software may be included in this product: ${names.join(
+          ", "
+        )}.`
+      );
       if (urls.length > 0) {
-        heading.push(`A copy of the source code may be downloaded from ${urls.join(', ')}.`);
+        heading.push(
+          `A copy of the source code may be downloaded from ${urls.join(", ")}.`
+        );
       }
-      heading.push('This software contains the following license and notice below:');
+      heading.push(
+        "This software contains the following license and notice below:"
+      );
 
-      console.log(heading.join(' '));
+      console.log(heading.join(" "));
       console.log();
 
       if (licenseKey) {
@@ -206,5 +284,5 @@ export const {run, examples} = buildSubCommands('licenses', {
 
       console.log();
     }
-  },
+  }
 });
